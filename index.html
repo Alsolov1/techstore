@@ -1786,18 +1786,6 @@
           }
         }
       });
-      async function initializeOrders() {
-        try {
-          const result = await window.dataSdk.init({
-            onDataChanged() {
-              /* Submissions are write-only. */
-            },
-          });
-          sdkReady = result.isOk;
-        } catch {
-          sdkReady = false;
-        }
-      }
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!form.reportValidity()) return;
@@ -1805,10 +1793,7 @@
           showMessage("order-error");
           return;
         }
-        if (!sdkReady) {
-          showMessage("order-error");
-          return;
-        }
+
         showMessage(null);
         submitButton.disabled = true;
         form
@@ -1817,13 +1802,14 @@
         form
           .querySelector('[data-template-id="order-saving-text"]')
           .classList.remove("hidden");
+
         const data = new FormData(form);
         const order = {
-          full_name: String(data.get("full_name")).trim(),
-          phone: String(data.get("phone")).trim(),
-          wilaya: String(data.get("wilaya")).trim(),
-          commune: String(data.get("commune")).trim(),
-          address: String(data.get("address")).trim(),
+          full_name: String(data.get("full_name") || "").trim(),
+          phone: String(data.get("phone") || "").trim(),
+          wilaya: String(data.get("wilaya") || "").trim(),
+          commune: String(data.get("commune") || "").trim(),
+          address: String(data.get("address") || "").trim(),
           products: [...cart]
             .map(([id, quantity]) => `${products[id].name} × ${quantity}`)
             .join("; "),
@@ -1835,13 +1821,23 @@
           ),
           created_at: new Date().toISOString(),
         };
+
         try {
           if (Object.values(order).some((value) => !value)) {
             showMessage("order-error");
             return;
           }
-          const result = await window.dataSdk.create(order);
-          if (result.isOk) {
+
+          const response = await fetch("https://formspree.io/f/mdeeznqb", {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(order),
+          });
+
+          if (response.ok) {
             form.reset();
             cart.clear();
             renderCart();
@@ -1849,14 +1845,13 @@
             document
               .getElementById("order-success")
               .scrollIntoView({ block: "nearest" });
-          } else
-            showMessage(
-              /999|limit|maximum/i.test(String(result.error))
-                ? "order-limit"
-                : "order-error"
-            );
-        } catch {
+          } else {
+            showMessage("order-error");
+            console.error("Order submission failed with status:", response.status);
+          }
+        } catch (error) {
           showMessage("order-error");
+          console.error("Could not submit order:", error);
         } finally {
           submitButton.disabled = false;
           form
@@ -1868,7 +1863,6 @@
         }
       });
       lucide.createIcons();
-      initializeOrders();
     </script>
   </body>
 </html>
